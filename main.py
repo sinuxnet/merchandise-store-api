@@ -1,8 +1,9 @@
 import os
+import psycopg2
+
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi import FastAPI, HTTPException
-import psycopg2
 from pydantic import BaseModel
 
 app = FastAPI()
@@ -167,6 +168,39 @@ async def update_product(product_id: int, product_update: ProductModel):
         error_message = {
             "error": "Failed to update product",
             "message": "An error occurred while updating the product.",
+            "detail": str(e),
+        }
+        raise HTTPException(status_code=500, detail=error_message)
+
+
+# Endpoint to delete a specific product
+@app.delete("/product/{product_id}")
+async def delete_product(product_id: int):
+    try:
+        # Check if the product exist
+        if not product_exists(product_id):
+            raise HTTPException(status_code=404, detail="Product not found")
+
+        # Delete the product from the database
+        cur.execute("DELETE FROM products WHERE id - %s", (product_id,))
+
+        # Commit
+        conn.commit()
+
+        # Return a success message
+        return JSONResponse(content={"message": "Product deleted successfully"})
+
+    except HTTPException:
+        raise  # # Re-raise the HTTPException to preserve the original status code and detail message
+
+    except Exception as e:
+        # Rollback the transaction in case of any error
+        conn.rollback()
+
+        # Raise an HTTPException with a 500 status code and detailed error message
+        error_message = {
+            "error": "Failed to delete product",
+            "message": "An error occurred while deleting the product.",
             "detail": str(e),
         }
         raise HTTPException(status_code=500, detail=error_message)
