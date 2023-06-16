@@ -23,14 +23,23 @@ conn = psycopg2.connect(
 cur = conn.cursor()
 
 
+def product_exists(product_id: int) -> bool:
+    # Check if the product exists
+    cur.execute("SELECT id FROM products WHERE id = %s", (product_id,))
+    existing_product = cur.fetchone()
+    return existing_product is not None
+
+
 # Product model
-class ProductCreate(BaseModel):
+class ProductModel(BaseModel):
     name: str
     price: float
     description: str
 
 
-# ------------------------------------------
+# --------------------------------------------------
+# ----------------- Endpoints ----------------------
+# --------------------------------------------------
 # Endpoint to retrieve all products
 @app.get("/products")
 async def get_all_products():
@@ -90,7 +99,7 @@ async def get_product_by_id(product_id: int):
 
 # Endpoint to create a new product
 @app.post("/products")
-async def create_product(product: ProductCreate):
+async def create_product(product: ProductModel):
     try:
         # Insert the new product into database
         cur.execute(
@@ -118,4 +127,46 @@ async def create_product(product: ProductCreate):
             "detail": str(e),
         }
 
+        raise HTTPException(status_code=500, detail=error_message)
+
+
+# Endpoint to update details of a specific product
+@app.put("/products/{product_id}")
+async def update_product(product_id: int, product_update: ProductModel):
+    try:
+        # Check if the product exists
+        # Check if the product exist
+        if not product_exists(product_id):
+            raise HTTPException(status_code=404, detail="Product not found")
+
+        # Update the product details in the database
+        cur.execute(
+            "UPDATE products SET name = %s, price = %s, description = %s WHERE id = %s",
+            (
+                product_update.name,
+                product_update.price,
+                product_update.description,
+                product_id,
+            ),
+        )
+
+        # Commit
+        conn.commit()
+
+        # Return a success message
+        return JSONResponse(content={"message": "Product updated successfully"})
+
+    except HTTPException:
+        raise  # # Re-raise the HTTPException to preserve the original status code and detail message
+
+    except Exception as e:
+        # Rollback the transaction in case of any error
+        conn.rollback()
+
+        # Raise an HTTPException with a 500 status code and detailed error message
+        error_message = {
+            "error": "Failed to update product",
+            "message": "An error occurred while updating the product.",
+            "detail": str(e),
+        }
         raise HTTPException(status_code=500, detail=error_message)
