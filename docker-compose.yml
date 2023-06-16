@@ -1,0 +1,56 @@
+version: '3'
+services:
+  api:
+    container_name: merchandise_store_api
+    build: .
+    image: merchandise-store-api:dev
+    restart: unless-stopped
+    ports:
+      - 8000:8000
+    depends_on:
+      - db
+    environment:
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_NAME=merchandise_store
+      - DB_USER=db_user
+      - DB_PASSWORD_FILE=/run/secrets/db_password
+    networks:
+      - merchandise-store
+
+  db:
+    container_name: merchandise_store_db
+    image: postgres:15.3
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=db_user
+      - POSTGRES_PASSWORD_FILE=/run/secrets/db_password
+      - POSTGRES_DB=merchandise_store
+    volumes:
+      - postgres:/var/lib/postgresql/data
+    security_opt:
+      - no-new-privileges:true
+    secrets:
+      - db_password
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - merchandise-store
+
+volumes:
+  postgres:
+    name: postgres
+secrets:
+  db_password:
+    file: ./db_password.txt
+networks:
+  merchandise-store:
+    name: merchandise-store
