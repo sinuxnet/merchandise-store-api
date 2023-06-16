@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi import FastAPI, HTTPException
 import psycopg2
+from pydantic import BaseModel
 
 app = FastAPI()
 
@@ -22,6 +23,14 @@ conn = psycopg2.connect(
 cur = conn.cursor()
 
 
+# Product model
+class ProductCreate(BaseModel):
+    name: str
+    price: float
+    description: str
+
+
+# ------------------------------------------
 # Endpoint to retrieve all products
 @app.get("/products")
 async def get_all_products():
@@ -63,8 +72,8 @@ async def get_product_by_id(product_id: int):
             "suggestions": [
                 "Double-check the product ID and try again.",
                 "Ensure the product exists in the database.",
-                "Contact support for further assistance."
-            ]
+                "Contact support for further assistance.",
+            ],
         }
         raise HTTPException(status_code=404, detail=error_message)
 
@@ -77,3 +86,36 @@ async def get_product_by_id(product_id: int):
     }
 
     return JSONResponse(content=product_dict)
+
+
+# Endpoint to create a new product
+@app.post("/products")
+async def create_product(product: ProductCreate):
+    try:
+        # Insert the new product into database
+        cur.execute(
+            "INSERT INTO products (name, price, description) VALUES (%s, %s, %s) RETURNING id",
+            (product.name, product.price, product.description),
+        )
+
+        # Fetch the generated product ID
+        product_id = cur.fetchone()[0]
+
+        # Commit
+        conn.commit()
+
+        # Return the newly created product ID
+        return JSONResponse(content={"product_id": product_id})
+
+    except Exception as e:
+        # Rollback the transaction in case of any error
+        conn.rollback()
+
+        # Raise an HTTPException with a 500 status code and detailed error message
+        error_message = {
+            "error": "Failed to create product",
+            "message": "An error occurred while creating the product.",
+            "detail": str(e),
+        }
+
+        raise HTTPException(status_code=500, detail=error_message)
